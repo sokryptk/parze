@@ -72,6 +72,7 @@ pub const Parser = struct {
         var i: usize = 1; // ignore the first exe argument
         var result = Result(flags).init(self.allocator);
         result._args = try std.process.argsAlloc(self.allocator);
+        errdefer result.deinit();
 
         while (i < result._args.len) : (i += 1) {
             const arg = result._args[i];
@@ -130,7 +131,11 @@ pub const Parser = struct {
                                 bool => @field(result.flags, field.name) = true,
                                 u64, []const u8 => |dtype| {
                                     // it should absolutely be the last short to hold a non-boolean value
-                                    if (index != prefix.len - 1 and (i >= result._args.len - 1 or whereEql == null)) {
+                                    if (index != prefix.len - 1) {
+                                        return ParseError.ValueNotFound;
+                                    }
+
+                                    if (i < result._args.len and whereEql == null) {
                                         return ParseError.ValueNotFound;
                                     }
 

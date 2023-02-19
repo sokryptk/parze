@@ -135,7 +135,7 @@ pub const Parser = struct {
                                         return ParseError.ValueNotFound;
                                     }
 
-                                    if (i < result._args.len and whereEql == null) {
+                                    if (i >= result._args.len - 1 and whereEql == null) {
                                         return ParseError.ValueNotFound;
                                     }
 

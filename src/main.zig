@@ -114,12 +114,12 @@ pub const Parser = struct {
                                         if (whereEql) |pos| arg[(pos + 1)..] else args[i + 1],
                                     ),
                                 };
+
+                                i += 1;
                             },
 
                             else => return ConfigError.InvalidType,
                         }
-
-                        i += 1;
                     }
                 }
             } else if (std.mem.startsWith(u8, arg, "-")) {
@@ -156,10 +156,11 @@ pub const Parser = struct {
                                             if (whereEql) |eql| arg[(eql + 1)..] else args[i + 1],
                                         ),
                                     };
+
+                                    i += 1;
                                 },
                                 else => return ConfigError.InvalidType,
                             }
-                            i += 1;
                         }
                     }
                 }

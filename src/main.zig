@@ -88,7 +88,9 @@ pub const Parser = struct {
 
             if (std.mem.startsWith(u8, arg, "--")) {
                 // long flags
-                const prefix = arg[2..];
+
+                const whereEql = std.mem.indexOf(u8, arg, "=");
+                const prefix = if (whereEql) |eql| arg[2..eql] else arg[2..];
 
                 inline for (@typeInfo(flags).Struct.fields) |field| {
                     if (std.mem.eql(u8, prefix, field.name)) {
@@ -96,7 +98,7 @@ pub const Parser = struct {
                             bool => @field(result.flags, field.name) = true,
 
                             usize, []const u8 => |dtype| {
-                                if (i >= args.len - 1) {
+                                if (i >= args.len - 1 and whereEql == null) {
                                     // last element
                                     return ParseError.ValueNotFound;
                                 }
@@ -104,10 +106,13 @@ pub const Parser = struct {
                                 @field(result.flags, field.name) = switch (dtype) {
                                     usize => try std.fmt.parseInt(
                                         usize,
-                                        args[i + 1],
+                                        if (whereEql) |pos| arg[(pos + 1)..] else args[i + 1],
                                         10,
                                     ),
-                                    else => try self.allocator.dupe(u8, args[i + 1]),
+                                    else => try self.allocator.dupe(
+                                        u8,
+                                        if (whereEql) |pos| arg[(pos + 1)..] else args[i + 1],
+                                    ),
                                 };
                             },
 
@@ -120,7 +125,8 @@ pub const Parser = struct {
             } else if (std.mem.startsWith(u8, arg, "-")) {
                 // short flags can be merged together like -abc
                 // these can also contain values
-                const prefix = arg[1..];
+                const whereEql = std.mem.indexOf(u8, arg, "=");
+                const prefix = if (whereEql) |eql| arg[1..eql] else arg[1..];
 
                 for (prefix) |short, index| {
                     inline for (@typeInfo(flags).Struct.fields) |field| {
@@ -135,17 +141,20 @@ pub const Parser = struct {
                                 bool => @field(result.flags, field.name) = true,
                                 u64, []const u8 => |dtype| {
                                     // it should absolutely be the last short to hold a non-boolean value
-                                    if (index != prefix.len - 1 or i >= args.len - 1) {
+                                    if (index != prefix.len - 1 and (i >= args.len - 1 or whereEql == null)) {
                                         return ParseError.ValueNotFound;
                                     }
 
                                     @field(result.flags, field.name) = switch (dtype) {
                                         u64 => try std.fmt.parseInt(
                                             u64,
-                                            args[i + 1],
+                                            if (whereEql) |eql| arg[(eql + 1)..] else args[i + 1],
                                             10,
                                         ),
-                                        else => try self.allocator.dupe(u8, args[i + 1]),
+                                        else => try self.allocator.dupe(
+                                            u8,
+                                            if (whereEql) |eql| arg[(eql + 1)..] else args[i + 1],
+                                        ),
                                     };
                                 },
                                 else => return ConfigError.InvalidType,

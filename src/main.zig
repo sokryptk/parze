@@ -27,6 +27,10 @@ pub const Parser = struct {
         };
     }
 
+    pub fn deinit(self: Self) void {
+        self.middlewares.deinit();
+    }
+
     pub fn onCommand(self: *Self, cmd: []const u8, on: delegate) !void {
         try self.middlewares.put(cmd, on);
     }
@@ -74,7 +78,7 @@ pub const Parser = struct {
                                         args[i + 1],
                                         10,
                                     ),
-                                    else => args[i + 1],
+                                    else => try self.allocator.dupe(u8, args[i + 1]),
                                 };
                             },
 
@@ -114,7 +118,7 @@ pub const Parser = struct {
                                             args[i + 1],
                                             10,
                                         ),
-                                        else => args[i + 1],
+                                        else => try self.allocator.dupe(u8, args[i + 1]),
                                     };
                                 },
                                 else => return Err.Bruh,
@@ -128,7 +132,6 @@ pub const Parser = struct {
         }
 
         var arguments = &.{};
-        std.debug.print("{any}\n", .{res});
         return Result(flags){
             .flags = res,
             .arguments = arguments,

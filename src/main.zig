@@ -6,7 +6,6 @@ const noCommandFound = "parzer-command-not-found";
 pub const Options = struct {};
 
 pub const ConfigError = error{
-    UnassignedDefaultValues,
     InvalidType,
     ShortsNotFound,
 };
@@ -201,14 +200,4 @@ fn extractFlag(flag: u8, comptime flags: type) !?[]const u8 {
     }
 
     return null;
-}
-
-fn isDefaulted(comptime flags: type) bool {
-    comptime for (@typeInfo(flags).Struct.fields) |field| {
-        if (field.default_value == null) {
-            return false;
-        }
-    } else {
-        return true;
-    };
 }

@@ -34,7 +34,7 @@ pub fn Result(comptime flags: type) type {
 
         pub fn deinit(self: Self) void {
             inline for (@typeInfo(flags).Struct.fields) |field| {
-                if (field.type == []const u8) {
+                if (field.type == []const u8 and field.default_value == null) {
                     self.allocator.free(@field(self.flags, field.name));
                 }
             }

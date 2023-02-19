@@ -18,8 +18,21 @@ pub const ParseError = error{
 
 pub fn Result(comptime flags: type) type {
     return struct {
+        allocator: std.mem.Allocator,
         flags: flags,
-        arguments: [][]const u8,
+        arguments: std.ArrayList([]const u8),
+
+        const Self = @This();
+
+        pub fn deinit(self: Self) void {
+            inline for (@typeInfo(flags).Struct.fields) |field| {
+                if (field.type == []const u8) {
+                    self.allocator.free(@field(self.flags, field.name));
+                }
+            }
+
+            self.arguments.deinit();
+        }
     };
 }
 
@@ -59,8 +72,9 @@ pub const Parser = struct {
         const args = try std.process.argsAlloc(self.allocator);
         defer std.process.argsFree(self.allocator, args);
 
-        var i: usize = 0;
+        var i: usize = 1; // ignore the first exe argument
         var res: flags = .{};
+        var arguments: std.ArrayList([]const u8) = std.ArrayList([]const u8).init(self.allocator);
 
         while (i < args.len) : (i += 1) {
             const arg = args[i];
@@ -92,8 +106,8 @@ pub const Parser = struct {
 
                             else => return ConfigError.InvalidType,
                         }
-                    } else {
-                        return ParseError.InvalidFlag;
+
+                        i += 1;
                     }
                 }
             } else if (std.mem.startsWith(u8, arg, "-")) {
@@ -129,17 +143,18 @@ pub const Parser = struct {
                                 },
                                 else => return ConfigError.InvalidType,
                             }
+                            i += 1;
                         }
                     }
                 }
             } else {
+                try arguments.append(try self.allocator.dupe(u8, arg));
                 // no flags
             }
         }
 
-        var arguments = &.{};
-
         return Result(flags){
+            .allocator = self.allocator,
             .flags = res,
             .arguments = arguments,
         };

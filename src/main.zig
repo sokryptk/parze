@@ -24,6 +24,14 @@ pub fn Result(comptime flags: type) type {
 
         const Self = @This();
 
+        pub fn init(allocator: std.mem.Allocator) Self {
+            return .{
+                .allocator = allocator,
+                .flags = .{},
+                .arguments = std.ArrayList([]const u8).init(allocator),
+            };
+        }
+
         pub fn deinit(self: Self) void {
             inline for (@typeInfo(flags).Struct.fields) |field| {
                 if (field.type == []const u8) {
@@ -73,8 +81,7 @@ pub const Parser = struct {
         defer std.process.argsFree(self.allocator, args);
 
         var i: usize = 1; // ignore the first exe argument
-        var res: flags = .{};
-        var arguments: std.ArrayList([]const u8) = std.ArrayList([]const u8).init(self.allocator);
+        var result = Result(flags).init(self.allocator);
 
         while (i < args.len) : (i += 1) {
             const arg = args[i];
@@ -85,8 +92,8 @@ pub const Parser = struct {
 
                 inline for (@typeInfo(flags).Struct.fields) |field| {
                     if (std.mem.eql(u8, prefix, field.name)) {
-                        switch (@TypeOf(@field(res, field.name))) {
-                            bool => @field(res, field.name) = true,
+                        switch (@TypeOf(@field(result.flags, field.name))) {
+                            bool => @field(result.flags, field.name) = true,
 
                             usize, []const u8 => |dtype| {
                                 if (i >= args.len - 1) {
@@ -94,7 +101,7 @@ pub const Parser = struct {
                                     return ParseError.ValueNotFound;
                                 }
 
-                                @field(res, field.name) = switch (dtype) {
+                                @field(result.flags, field.name) = switch (dtype) {
                                     usize => try std.fmt.parseInt(
                                         usize,
                                         args[i + 1],
@@ -124,15 +131,15 @@ pub const Parser = struct {
                         }
 
                         if (std.mem.eql(u8, field.name, flag.?)) {
-                            switch (@TypeOf(@field(res, field.name))) {
-                                bool => @field(res, field.name) = true,
+                            switch (@TypeOf(@field(result.flags, field.name))) {
+                                bool => @field(result.flags, field.name) = true,
                                 u64, []const u8 => |dtype| {
                                     // it should absolutely be the last short to hold a non-boolean value
                                     if (index != prefix.len - 1 or i >= args.len - 1) {
                                         return ParseError.ValueNotFound;
                                     }
 
-                                    @field(res, field.name) = switch (dtype) {
+                                    @field(result.flags, field.name) = switch (dtype) {
                                         u64 => try std.fmt.parseInt(
                                             u64,
                                             args[i + 1],
@@ -148,16 +155,12 @@ pub const Parser = struct {
                     }
                 }
             } else {
-                try arguments.append(try self.allocator.dupe(u8, arg));
+                try result.arguments.append(try self.allocator.dupe(u8, arg));
                 // no flags
             }
         }
 
-        return Result(flags){
-            .allocator = self.allocator,
-            .flags = res,
-            .arguments = arguments,
-        };
+        return result;
     }
 
     pub fn run(self: *Self) !void {

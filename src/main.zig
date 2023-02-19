@@ -21,24 +21,20 @@ pub fn Result(comptime flags: type) type {
         allocator: std.mem.Allocator,
         flags: flags,
         arguments: std.ArrayList([]const u8),
+        _args: [][:0]u8 = undefined,
 
         const Self = @This();
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return .{
                 .allocator = allocator,
-                .flags = .{},
+                .flags = std.mem.zeroInit(flags, .{}),
                 .arguments = std.ArrayList([]const u8).init(allocator),
             };
         }
 
         pub fn deinit(self: Self) void {
-            inline for (@typeInfo(flags).Struct.fields) |field| {
-                if (field.type == []const u8 and field.default_value == null) {
-                    self.allocator.free(@field(self.flags, field.name));
-                }
-            }
-
+            std.process.argsFree(self.allocator, self._args);
             self.arguments.deinit();
         }
     };
@@ -73,18 +69,12 @@ pub const Parser = struct {
     pub fn parse(self: Self, comptime flags: type, opts: Options) !Result(flags) {
         _ = opts;
 
-        if (!comptime isDefaulted(flags)) {
-            return ConfigError.UnassignedDefaultValues;
-        }
-
-        const args = try std.process.argsAlloc(self.allocator);
-        defer std.process.argsFree(self.allocator, args);
-
         var i: usize = 1; // ignore the first exe argument
         var result = Result(flags).init(self.allocator);
+        result._args = try std.process.argsAlloc(self.allocator);
 
-        while (i < args.len) : (i += 1) {
-            const arg = args[i];
+        while (i < result._args.len) : (i += 1) {
+            const arg = result._args[i];
 
             if (std.mem.startsWith(u8, arg, "--")) {
                 // long flags
@@ -98,7 +88,7 @@ pub const Parser = struct {
                             bool => @field(result.flags, field.name) = true,
 
                             usize, []const u8 => |dtype| {
-                                if (i >= args.len - 1 and whereEql == null) {
+                                if (i >= result._args.len - 1 and whereEql == null) {
                                     // last element
                                     return ParseError.ValueNotFound;
                                 }
@@ -106,16 +96,15 @@ pub const Parser = struct {
                                 @field(result.flags, field.name) = switch (dtype) {
                                     usize => try std.fmt.parseInt(
                                         usize,
-                                        if (whereEql) |pos| arg[(pos + 1)..] else args[i + 1],
+                                        if (whereEql) |pos| arg[(pos + 1)..] else result._args[i + 1],
                                         10,
                                     ),
-                                    else => try self.allocator.dupe(
-                                        u8,
-                                        if (whereEql) |pos| arg[(pos + 1)..] else args[i + 1],
-                                    ),
+                                    else => if (whereEql) |pos| arg[(pos + 1)..] else result._args[i + 1],
                                 };
 
-                                i += 1;
+                                if (whereEql == null) {
+                                    i += 1;
+                                }
                             },
 
                             else => return ConfigError.InvalidType,
@@ -141,23 +130,23 @@ pub const Parser = struct {
                                 bool => @field(result.flags, field.name) = true,
                                 u64, []const u8 => |dtype| {
                                     // it should absolutely be the last short to hold a non-boolean value
-                                    if (index != prefix.len - 1 and (i >= args.len - 1 or whereEql == null)) {
+                                    if (index != prefix.len - 1 and (i >= result._args.len - 1 or whereEql == null)) {
                                         return ParseError.ValueNotFound;
                                     }
 
                                     @field(result.flags, field.name) = switch (dtype) {
                                         u64 => try std.fmt.parseInt(
                                             u64,
-                                            if (whereEql) |eql| arg[(eql + 1)..] else args[i + 1],
+                                            if (whereEql) |eql| arg[(eql + 1)..] else result._args[i + 1],
                                             10,
                                         ),
-                                        else => try self.allocator.dupe(
-                                            u8,
-                                            if (whereEql) |eql| arg[(eql + 1)..] else args[i + 1],
-                                        ),
+                                        else => if (whereEql) |eql| arg[(eql + 1)..] else result._args[i + 1],
                                     };
 
-                                    i += 1;
+                                    // only move when its space delimited
+                                    if (whereEql == null) {
+                                        i += 1;
+                                    }
                                 },
                                 else => return ConfigError.InvalidType,
                             }
@@ -165,7 +154,7 @@ pub const Parser = struct {
                     }
                 }
             } else {
-                try result.arguments.append(try self.allocator.dupe(u8, arg));
+                try result.arguments.append(arg);
                 // no flags
             }
         }

@@ -8,6 +8,7 @@ pub const Options = struct {};
 pub const ConfigError = error{
     UnassignedDefaultValues,
     InvalidType,
+    ShortsNotFound,
 };
 
 pub const ParseError = error{
@@ -120,7 +121,7 @@ pub const Parser = struct {
 
                 for (prefix) |short, index| {
                     inline for (@typeInfo(flags).Struct.fields) |field| {
-                        const flag = extractFlag(short, flags);
+                        const flag = try extractFlag(short, flags);
 
                         if (flag == null) {
                             return ParseError.InvalidFlag;
@@ -188,8 +189,12 @@ pub const Parser = struct {
 //  {
 //    .help = .{"h", "hel"}
 //  }
-fn extractFlag(flag: u8, comptime flags: type) ?[]const u8 {
-    inline for (flags.aliases.kvs) |kv| {
+fn extractFlag(flag: u8, comptime flags: type) !?[]const u8 {
+    if (!@hasDecl(flags, "shorts")) {
+        return ConfigError.ShortsNotFound;
+    }
+
+    inline for (flags.shorts.kvs) |kv| {
         if (kv.value == flag) {
             return kv.key;
         }

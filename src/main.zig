@@ -4,8 +4,16 @@ const delegate = *const fn () void;
 const noCommandFound = "parzer-command-not-found";
 
 pub const Options = struct {};
-pub const Err = error{
-    Bruh,
+
+pub const ConfigError = error{
+    UnassignedDefaultValues,
+    InvalidType,
+};
+
+pub const ParseError = error{
+    ShortHandNotLastElementWhenGrouped,
+    ValueNotFound,
+    InvalidFlag,
 };
 
 pub fn Result(comptime flags: type) type {
@@ -45,7 +53,7 @@ pub const Parser = struct {
         _ = opts;
 
         if (!comptime isDefaulted(flags)) {
-            return Err.Bruh;
+            return ConfigError.UnassignedDefaultValues;
         }
 
         const args = try std.process.argsAlloc(self.allocator);
@@ -69,7 +77,7 @@ pub const Parser = struct {
                             usize, []const u8 => |dtype| {
                                 if (i >= args.len - 1) {
                                     // last element
-                                    return Err.Bruh;
+                                    return ParseError.ValueNotFound;
                                 }
 
                                 @field(res, field.name) = switch (dtype) {
@@ -82,8 +90,10 @@ pub const Parser = struct {
                                 };
                             },
 
-                            else => unreachable,
+                            else => return ConfigError.InvalidType,
                         }
+                    } else {
+                        return ParseError.InvalidFlag;
                     }
                 }
             } else if (std.mem.startsWith(u8, arg, "-")) {
@@ -96,7 +106,7 @@ pub const Parser = struct {
                         const flag = extractFlag(short, flags);
 
                         if (flag == null) {
-                            return Err.Bruh;
+                            return ParseError.InvalidFlag;
                         }
 
                         if (std.mem.eql(u8, field.name, flag.?)) {
@@ -104,12 +114,8 @@ pub const Parser = struct {
                                 bool => @field(res, field.name) = true,
                                 u64, []const u8 => |dtype| {
                                     // it should absolutely be the last short to hold a non-boolean value
-                                    if (index != prefix.len - 1) {
-                                        return Err.Bruh;
-                                    }
-
-                                    if (i >= args.len - 1) {
-                                        return Err.Bruh;
+                                    if (index != prefix.len - 1 or i >= args.len - 1) {
+                                        return ParseError.ValueNotFound;
                                     }
 
                                     @field(res, field.name) = switch (dtype) {
@@ -121,7 +127,7 @@ pub const Parser = struct {
                                         else => try self.allocator.dupe(u8, args[i + 1]),
                                     };
                                 },
-                                else => return Err.Bruh,
+                                else => return ConfigError.InvalidType,
                             }
                         }
                     }
@@ -132,6 +138,7 @@ pub const Parser = struct {
         }
 
         var arguments = &.{};
+
         return Result(flags){
             .flags = res,
             .arguments = arguments,

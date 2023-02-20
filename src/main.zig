@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const delegate = *const fn () void;
+const Delegate = *const fn () void;
 const noCommandFound = "parzer-command-not-found";
 
 pub const Options = struct {};
@@ -20,7 +20,7 @@ pub fn Result(comptime flags: type) type {
     return struct {
         allocator: std.mem.Allocator,
         flags: flags,
-        arguments: std.ArrayList([]const u8),
+        arguments: std.ArrayListUnmanaged([]const u8),
         _args: [][:0]u8 = undefined,
 
         const Self = @This();
@@ -29,39 +29,39 @@ pub fn Result(comptime flags: type) type {
             return .{
                 .allocator = allocator,
                 .flags = std.mem.zeroInit(flags, .{}),
-                .arguments = std.ArrayList([]const u8).init(allocator),
+                .arguments = std.ArrayListUnmanaged([]const u8){},
             };
         }
 
-        pub fn deinit(self: Self) void {
+        pub fn deinit(self: *Self) void {
             std.process.argsFree(self.allocator, self._args);
-            self.arguments.deinit();
+            self.arguments.deinit(self.allocator);
         }
     };
 }
 
 pub const Parser = struct {
     allocator: std.mem.Allocator,
-    middlewares: std.StringHashMap(delegate),
+    middlewares: std.StringHashMapUnmanaged(Delegate),
     const Self = @This();
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return .{
             .allocator = allocator,
-            .middlewares = std.StringHashMap(delegate).init(allocator),
+            .middlewares = std.StringHashMapUnmanaged(Delegate){},
         };
     }
 
-    pub fn deinit(self: Self) void {
-        self.middlewares.deinit();
+    pub fn deinit(self: *Self) void {
+        self.middlewares.deinit(self.allocator);
     }
 
-    pub fn onCommand(self: *Self, cmd: []const u8, on: delegate) !void {
-        try self.middlewares.put(cmd, on);
+    pub fn onCommand(self: *Self, cmd: []const u8, on: Delegate) !void {
+        try self.middlewares.put(self.allocator, cmd, on);
     }
 
-    pub fn onDefault(self: *Self, on: delegate) !void {
-        try self.middlewares.put(noCommandFound, on);
+    pub fn onDefault(self: *Self, on: Delegate) !void {
+        try self.middlewares.put(self.allocator, noCommandFound, on);
     }
 
     // support parsing flags with = and Space delimiter.
@@ -159,7 +159,7 @@ pub const Parser = struct {
                     }
                 }
             } else {
-                try result.arguments.append(arg);
+                try result.arguments.append(result.allocator, arg);
                 // no flags
             }
         }

@@ -80,6 +80,12 @@ pub const Parser = struct {
             if (std.mem.startsWith(u8, arg, "--")) {
                 // long flags
 
+                // anything after -- is regarded as the arguments
+                if (arg.len == 2) {
+                    try result.arguments.appendSlice(result.allocator, result._args[i..]);
+                    break;
+                }
+
                 const whereEql = std.mem.indexOf(u8, arg, "=");
                 const prefix = if (whereEql) |eql| arg[2..eql] else arg[2..];
 

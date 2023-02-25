@@ -82,7 +82,9 @@ pub const Parser = struct {
 
                 // anything after -- is regarded as the arguments
                 if (arg.len == 2) {
-                    try result.arguments.appendSlice(result.allocator, result._args[i..]);
+                    if (i + 1 < result._args.len) {
+                        try result.arguments.appendSlice(result.allocator, result._args[(i + 1)..]);
+                    }
                     break;
                 }
 

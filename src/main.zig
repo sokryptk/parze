@@ -21,7 +21,6 @@ pub fn Result(comptime flags: type) type {
         allocator: std.mem.Allocator,
         flags: flags,
         arguments: std.ArrayListUnmanaged([]const u8),
-        _args: [][:0]u8 = undefined,
 
         const Self = @This();
 
@@ -34,7 +33,6 @@ pub fn Result(comptime flags: type) type {
         }
 
         pub fn deinit(self: *Self) void {
-            std.process.argsFree(self.allocator, self._args);
             self.arguments.deinit(self.allocator);
         }
     };
@@ -66,24 +64,23 @@ pub const Parser = struct {
 
     // support parsing flags with = and Space delimiter.
     // -a index.js , -a=index.js, --append=index.js, --append index.js
-    pub fn parse(self: Self, comptime flags: type, opts: Options) !Result(flags) {
+    pub fn parse(self: Self, args: [][]u8, comptime flags: type, opts: Options) !Result(flags) {
         _ = opts;
 
         var i: usize = 1; // ignore the first exe argument
         var result = Result(flags).init(self.allocator);
-        result._args = try std.process.argsAlloc(self.allocator);
         errdefer result.deinit();
 
-        while (i < result._args.len) : (i += 1) {
-            const arg = result._args[i];
+        while (i < args.len) : (i += 1) {
+            const arg = args[i];
 
             if (std.mem.startsWith(u8, arg, "--")) {
                 // long flags
 
                 // anything after -- is regarded as the arguments
                 if (arg.len == 2) {
-                    if (i + 1 < result._args.len) {
-                        try result.arguments.appendSlice(result.allocator, result._args[(i + 1)..]);
+                    if (i + 1 < args.len) {
+                        try result.arguments.appendSlice(result.allocator, args[(i + 1)..]);
                     }
                     break;
                 }
@@ -97,7 +94,7 @@ pub const Parser = struct {
                             bool => @field(result.flags, field.name) = true,
 
                             usize, []const u8 => |dtype| {
-                                if (i >= result._args.len - 1 and whereEql == null) {
+                                if (i >= args.len - 1 and whereEql == null) {
                                     // last element
                                     return ParseError.ValueNotFound;
                                 }
@@ -105,10 +102,10 @@ pub const Parser = struct {
                                 @field(result.flags, field.name) = switch (dtype) {
                                     usize => try std.fmt.parseInt(
                                         usize,
-                                        if (whereEql) |pos| arg[(pos + 1)..] else result._args[i + 1],
+                                        if (whereEql) |pos| arg[(pos + 1)..] else args[i + 1],
                                         10,
                                     ),
-                                    else => if (whereEql) |pos| arg[(pos + 1)..] else result._args[i + 1],
+                                    else => if (whereEql) |pos| arg[(pos + 1)..] else args[i + 1],
                                 };
 
                                 if (whereEql == null) {
@@ -143,17 +140,17 @@ pub const Parser = struct {
                                         return ParseError.ValueNotFound;
                                     }
 
-                                    if (i >= result._args.len - 1 and whereEql == null) {
+                                    if (i >= args.len - 1 and whereEql == null) {
                                         return ParseError.ValueNotFound;
                                     }
 
                                     @field(result.flags, field.name) = switch (dtype) {
                                         u64 => try std.fmt.parseInt(
                                             u64,
-                                            if (whereEql) |eql| arg[(eql + 1)..] else result._args[i + 1],
+                                            if (whereEql) |eql| arg[(eql + 1)..] else args[i + 1],
                                             10,
                                         ),
-                                        else => if (whereEql) |eql| arg[(eql + 1)..] else result._args[i + 1],
+                                        else => if (whereEql) |eql| arg[(eql + 1)..] else args[i + 1],
                                     };
 
                                     // only move when its space delimited
